@@ -1,59 +1,110 @@
 import face_recognition
-import os
 import cv2
-from datetime import datetime
+import numpy as np
 
+# This is a demo of running face recognition on live video from your webcam. It's a little more complicated than the
+# other example, but it includes some basic performance tweaks to make things run a lot faster:
+#   1. Process each video frame at 1/4 resolution (though still display it at full resolution)
+#   2. Only detect faces in every other frame of video.
 
-KNOWN_FACES_DIR = 'known_faces'
-#UNKNOWN_FACES_DIR = 'unknown_faces'
-TOLERANCE = 0.5
-FRAME_THICKNESS = 3
-FONT_THICKNESS = 2
-MODEL = 'cnn'  # default: 'hog', other one can be 'cnn' - CUDA accelerated (if available) deep-learning pretrained model
+# PLEASE NOTE: This example requires OpenCV (the `cv2` library) to be installed only to read from your webcam.
+# OpenCV is *not* required to use the face_recognition library. It's only required if you want to run this
+# specific demo. If you have trouble installing it, try any of the other demos that don't require it instead.
 
-video = cv2.VideoCapture(0) # could put filename
+# Get a reference to webcam #0 (the default one)
+video_capture = cv2.VideoCapture(0)
 
-print('Loading known faces...')
+# Load a sample picture and learn how to recognize it.
+dani0 = face_recognition.load_image_file("dani0.jpg")
+dani0_face_encoding = face_recognition.face_encodings(dani0)[0]
 
-known_faces = []
-known_names = []
+# Load a sample picture and learn how to recognize it.
+dani1 = face_recognition.load_image_file("dani1.jpg")
+dani1_face_encoding = face_recognition.face_encodings(dani1)[0]
 
-for name in os.listdir(KNOWN_FACES_DIR):
-    for filename in os.listdir(f'{KNOWN_FACES_DIR}/{name}'):
-        image = face_recognition.load_image_file(f'{KNOWN_FACES_DIR}/{name}/{filename}')
-        encoding = face_recognition.face_encodings(image)[0]
-        known_faces.append(encoding)
-        known_names.append(name)
+# Load a second sample picture and learn how to recognize it.
+dani2 = face_recognition.load_image_file("dani2.jpg")
+dani2_face_encoding = face_recognition.face_encodings(dani2)[0]
 
-print('Processing unknown faces...')
+# Create arrays of known face encodings and their names
+known_face_encodings = [
+    dani0_face_encoding,
+    dani1_face_encoding,
+    dani2_face_encoding
+]
+known_face_names = [
+    "dani0",
+    "dani1",
+    "dani2"
+]
+
+# Initialize some variables
+face_locations = []
+face_encodings = []
+face_names = []
+process_this_frame = True
+
 while True:
-    #print(f'Filename {filename}', end='')
+    # Grab a single frame of video
+    ret, frame = video_capture.read()
 
-    #image = face_recognition.load_image_file(f'{UNKNOWN_FACES_DIR}/{filename}')
-    ret, image = video.read()
+    # Resize frame of video to 1/4 size for faster face recognition processing
+    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
 
-    locations = face_recognition.face_locations(image, model=MODEL)
-    encodings = face_recognition.face_encodings(image, locations)
-    #image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
+    rgb_small_frame = small_frame[:, :, ::-1]
 
-    for face_encoding, face_location in zip(encodings, locations):
-        results = face_recognition.compare_faces(known_faces, face_encoding, TOLERANCE)
-        match = None
-        if True in results:  # If at least one is true, get a name of first of found labels
-            match = known_names[results.index(True)]
-            print(f"Match found: {match}"," at ", datetime.now())
-            top_left = (face_location[3], face_location[0])
-            bottom_right = (face_location[1], face_location[2])
-            color = [0, 255, 0]
-            cv2.rectangle(image, top_left, bottom_right, color, FRAME_THICKNESS)
+    # Only process every other frame of video to save time
+    if process_this_frame:
+        # Find all the faces and face encodings in the current frame of video
+        face_locations = face_recognition.face_locations(rgb_small_frame)
+        face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
 
-            top_left = (face_location[3], face_location[2])
-            bottom_right = (face_location[1], face_location[2] + 22)
-            cv2.rectangle(image, top_left, bottom_right, color, cv2.FILLED)
-            cv2.putText(image, match, (face_location[3] + 10, face_location[2] + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (200, 200, 200), FONT_THICKNESS)
+        face_names = []
+        for face_encoding in face_encodings:
+            # See if the face is a match for the known face(s)
+            matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+            name = "Unknown"
 
-        cv2.imshow(filename, image)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-        #cv2.waitKey(10000)
+            # # If a match was found in known_face_encodings, just use the first one.
+            # if True in matches:
+            #     first_match_index = matches.index(True)
+            #     name = known_face_names[first_match_index]
+
+            # Or instead, use the known face with the smallest distance to the new face
+            face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+            best_match_index = np.argmin(face_distances)
+            if matches[best_match_index]:
+                name = known_face_names[best_match_index]
+
+            face_names.append(name)
+
+    process_this_frame = not process_this_frame
+
+
+    # Display the results
+    for (top, right, bottom, left), name in zip(face_locations, face_names):
+        # Scale back up face locations since the frame we detected in was scaled to 1/4 size
+        top *= 4
+        right *= 4
+        bottom *= 4
+        left *= 4
+
+        # Draw a box around the face
+        cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+
+        # Draw a label with a name below the face
+        cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
+        font = cv2.FONT_HERSHEY_DUPLEX
+        cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+
+    # Display the resulting image
+    cv2.imshow('Video', frame)
+
+    # Hit 'q' on the keyboard to quit!
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release handle to the webcam
+video_capture.release()
+cv2.destroyAllWindows()
