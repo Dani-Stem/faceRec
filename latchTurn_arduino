@@ -1,0 +1,35 @@
+#include <Servo.h>
+
+Servo Mot;
+
+
+int pirPin = 7;
+int motionDetec = 0;
+
+void setup() {
+   Mot.attach(9);
+   pinMode(pirPin, INPUT);  
+   Mot.write(0);   
+   Serial.begin(9600);
+
+}
+
+void loop() {
+  
+ if(Serial.available()>0) {
+//  motionDetec = digitalRead(pirPin);
+//  Serial.println(motionDetec);
+//  if (motionDetec == 1) {
+      Mot.write(0);
+      delay(150);
+      Mot.write(180);
+      delay(150);
+      Mot.write(0);
+      }
+  else {
+    Mot.write(0);
+      delay(150);
+  }
+  
+  
+}
